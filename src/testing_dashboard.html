@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Testing Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+        ::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; } /* Consider using a variable here too */
+
+        .chat-bubble {
+            max-width: 80%;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            word-wrap: break-word;
+        }
+        .chat-bubble-user {
+            background-color: var(--chat-bubble-user-bg);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.25rem;
+        }
+        .chat-bubble-agent {
+            background-color: var(--chat-bubble-agent-bg);
+            color: var(--text-primary);
+            align-self: flex-start;
+            border-bottom-left-radius: 0.25rem;
+        }
+        .prose p { margin-top: 0; margin-bottom: 0.5rem; }
+        .prose ul, .prose ol { margin-top: 0; margin-bottom: 0.5rem; padding-left: 1.5rem;}
+        .prose strong { color: inherit; }
+
+        /* Estilos para etiquetas */
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-right: 4px;
+            margin-bottom: 4px;
+        }
+        .tag-remove {
+            margin-left: 4px;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        .tag-remove:hover {
+            opacity: 1;
+        }
+        .tag-filter.active {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        /* Dark/Light Mode */
+        :root {
+            --bg-primary: #111827; /* gray-900 */
+            --bg-secondary: #1f2937; /* gray-800 */
+            --bg-tertiary: #374151; /* gray-700 */
+            --border-color: #374151; /* gray-700 */
+            --text-primary: #f9fafb; /* gray-50 */
+            --text-secondary: #d1d5db; /* gray-300 */
+            --text-muted: #9ca3af; /* gray-400 */
+            --accent-color: #6366f1; /* indigo-500 */
+            --sidebar-active-bg: #374151;
+            --chat-bubble-user-bg: #3b82f6;
+            --chat-bubble-agent-bg: #4b5563;
+            --input-bg: #374151;
+        }
+
+        html.light {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9fafb; /* gray-50 */
+            --bg-tertiary: #f3f4f6; /* gray-100 */
+            --border-color: #e5e7eb; /* gray-200 */
+            --text-primary: #1f2937; /* gray-800 */
+            --text-secondary: #374151; /* gray-700 */
+            --text-muted: #6b7280; /* gray-500 */
+            --accent-color: #4f46e5; /* indigo-600 */
+            --sidebar-active-bg: #e5e7eb;
+            --chat-bubble-user-bg: #2563eb;
+            --chat-bubble-agent-bg: #e5e7eb;
+            --input-bg: #e5e7eb;
+        }
+
+        body { 
+            background-color: var(--bg-primary);
+            color: var(--text-secondary);
+            font-family: 'Inter', sans-serif;
+        }
+        .sidebar-item.active { background-color: var(--sidebar-active-bg); }
+
+        #search-conversations, #add-tag-input {
+            background-color: var(--input-bg);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+
+        #search-conversations::placeholder, #add-tag-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .sidebar-item p:first-child {
+            color: var(--text-primary);
+        }
+        .sidebar-item p:last-child {
+            color: var(--text-muted);
+        }
+        .sidebar-item.active p:last-child {
+            color: var(--accent-color);
+        }
+
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+    <!-- Columna de CONVERSACIONES -->
+    <aside style="background-color: var(--bg-secondary); border-color: var(--border-color);" class="w-1/3 max-w-sm border-r flex flex-col flex-shrink-0">
+        <header style="background-color: var(--bg-secondary); border-color: var(--border-color);" class="p-4 border-b sticky top-0 z-10">
+            <div class="flex items-center justify-between gap-2 mb-4">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="message-square" class="text-indigo-400"></i>
+                    <h1 class="text-xl font-bold" style="color: var(--text-primary);">Conversaciones</h1>
+                </div>
+                <button id="new-chat-btn" class="p-2 rounded-md hover:bg-gray-700 focus:outline-none">
+                    <i data-lucide="plus-circle"></i>
+                </button>
+                <button id="theme-toggle" class="p-2 rounded-md hover:bg-gray-700 focus:outline-none">
+                    <i data-lucide="sun" class="hidden light:hidden"></i>
+                    <i data-lucide="moon" class="hidden dark:hidden"></i>
+                </button>
+            </div>
+            <div class="relative">
+                <input id="search-conversations" type="text" placeholder="Buscar por ID..." class="w-full bg-gray-700 border border-gray-600 rounded-md py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
+            </div>
+        </header>
+        
+        <!-- Filtro de Etiquetas -->
+        <div class="p-4 border-b border-gray-700">
+            <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2"><i data-lucide="tags"></i>Filtro de Etiquetas</h2>
+            <div id="tags-filter-list" class="flex flex-wrap gap-2">
+                <!-- Las etiquetas de filtro se insertarán aquí -->
+            </div>
+        </div>
+
+        <div id="conversations-list" class="overflow-y-auto flex-grow p-2">
+            <!-- La lista de conversaciones se insertará aquí -->
+        </div>
+        <footer class="p-2 border-t border-gray-700 text-center">
+            <button id="clear-logs-btn" class="w-full text-sm text-red-400 hover:bg-red-900/50 p-2 rounded-md flex items-center justify-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                Limpiar Registros
+            </button>
+        </footer>
+    </aside>
+
+    <!-- Ventana Principal del CHAT -->
+    <main class="flex-grow flex flex-col" style="background-color: var(--bg-secondary);">
+        <div id="chat-header" class="p-4 flex-col items-start justify-center h-auto min-h-[73px]" style="background-color: var(--bg-primary); border-bottom: 1px solid var(--border-color);">
+            <div class="flex justify-between items-center w-full">
+                <p>Viendo: <span id="current-conversation-id" class="font-semibold" style="color: var(--text-primary);">Ninguna seleccionada</span></p>
+                <div id="metadata-viewer" class="text-right"></div>
+            </div>
+            <div id="chat-tags-container" class="mt-2 w-full">
+                <!-- Las etiquetas y el input para añadir se insertarán aquí -->
+            </div>
+        </div>
+        <div id="chat-window" class="flex-grow p-6 overflow-y-auto" style="background-color: var(--bg-secondary);">
+            <div id="chat-messages" class="space-y-4 flex flex-col">
+                 <div class="flex items-center justify-center h-full">
+                    <div class="text-center" style="color: var(--text-muted);">
+                        <i data-lucide="messages-square" class="mx-auto h-12 w-12"></i>
+                        <h3 class="mt-2 text-sm font-medium">Selecciona una conversación</h3>
+                        <p class="mt-1 text-sm">Las respuestas del agente aparecerán aquí.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Formulario de Envío de Mensajes -->
+        <form id="send-message-form" class="p-4" style="background-color: var(--bg-primary); border-top: 1px solid var(--border-color);">
+            <div class="flex items-center gap-2">
+                <input id="message-input" type="text" placeholder="Escribe un mensaje o selecciona un archivo..." autocomplete="off" class="w-full rounded-md py-2 px-4 text-sm focus:outline-none focus:ring-2" style="background-color: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border-color);">
+                <label for="file-input" class="p-2 rounded-md cursor-pointer" style="background-color: var(--accent-color); color: white;">
+                    <i data-lucide="paperclip" class="w-5 h-5"></i>
+                </label>
+                <input id="file-input" type="file" class="hidden" accept="image/*,audio/*">
+                <button type="submit" class="p-2 rounded-md" style="background-color: var(--accent-color); color: white;">
+                    <i data-lucide="send" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="file-preview" class="mt-2"></div>
+        </form>
+
+        <div class="p-4 flex justify-center items-center gap-4 text-xs" style="background-color: var(--bg-primary); border-top: 1px solid var(--border-color); color: var(--text-muted);">
+            <span class="flex items-center gap-1"><div class="w-3 h-3 rounded-full" style="background-color: var(--chat-bubble-user-bg);"></div> Tu Mensaje (Saliente)</span>
+            <span class="flex items-center gap-1"><div class="w-3 h-3 rounded-full" style="background-color: var(--chat-bubble-agent-bg);"></div> Respuesta del Agente (Entrante)</span>
+        </div>
+    </main>
+    
+    <script>
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const sunIcon = themeToggleBtn.querySelector('i[data-lucide="sun"]');
+        const moonIcon = themeToggleBtn.querySelector('i[data-lucide="moon"]');
+        const newChatBtn = document.getElementById('new-chat-btn');
+
+        function setTheme(theme) {
+            localStorage.setItem('theme', theme);
+            if (theme === 'light') {
+                document.documentElement.classList.add('light');
+                sunIcon.style.display = 'none';
+                moonIcon.style.display = 'block';
+            } else {
+                document.documentElement.classList.remove('light');
+                sunIcon.style.display = 'block';
+                moonIcon.style.display = 'none';
+            }
+            lucide.createIcons();
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            const currentTheme = localStorage.getItem('theme') || 'dark';
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+
+        newChatBtn.addEventListener('click', () => {
+            startNewConversation();
+        });
+
+        const conversationsListEl = document.getElementById('conversations-list');
+        const chatMessagesEl = document.getElementById('chat-messages');
+        const currentConversationIdEl = document.getElementById('current-conversation-id');
+        const searchInput = document.getElementById('search-conversations');
+        const metadataViewerEl = document.getElementById('metadata-viewer');
+        const clearLogsBtn = document.getElementById('clear-logs-btn');
+        const tagsFilterListEl = document.getElementById('tags-filter-list');
+        const chatTagsContainerEl = document.getElementById('chat-tags-container');
+        const sendMessageForm = document.getElementById('send-message-form');
+        const messageInput = document.getElementById('message-input');
+        const fileInput = document.getElementById('file-input');
+        const filePreview = document.getElementById('file-preview');
+
+        let allMessages = {};
+        let selectedConversationId = null;
+        let conversationTags = {}; // { "conversationId": ["tag1", "tag2"] }
+        let activeTag = null;
+
+        // --- Gestión de Etiquetas ---
+        function loadTags() {
+            const storedTags = localStorage.getItem('conversationTags');
+            if (storedTags) {
+                conversationTags = JSON.parse(storedTags);
+            }
+        }
+
+        function saveTags() {
+            localStorage.setItem('conversationTags', JSON.stringify(conversationTags));
+        }
+
+        function addTag(conversationId, tag) {
+            if (!conversationId || !tag) return;
+            tag = tag.trim().toLowerCase();
+            if (!conversationTags[conversationId]) {
+                conversationTags[conversationId] = [];
+            }
+            if (!conversationTags[conversationId].includes(tag)) {
+                conversationTags[conversationId].push(tag);
+                saveTags();
+                renderAll();
+            }
+        }
+
+        function removeTag(conversationId, tag) {
+            if (!conversationTags[conversationId]) return;
+            conversationTags[conversationId] = conversationTags[conversationId].filter(t => t !== tag);
+            if (conversationTags[conversationId].length === 0) {
+                delete conversationTags[conversationId];
+            }
+            saveTags();
+            renderAll();
+        }
+
+        function toggleTagFilter(tag) {
+            if (activeTag === tag) {
+                activeTag = null; // Desactivar filtro
+            } else {
+                activeTag = tag;
+            }
+            renderAll();
+        }
+
+        // --- Renderizado ---
+        function renderAll() {
+            renderTagsFilter();
+            renderConversationsList();
+            renderChatWindow(selectedConversationId);
+            lucide.createIcons();
+        }
+
+        function renderTagsFilter() {
+            const allTags = [...new Set(Object.values(conversationTags).flat())].sort();
+            if (allTags.length === 0) {
+                tagsFilterListEl.innerHTML = '<p class="text-xs text-gray-500">No hay etiquetas.</p>';
+                return;
+            }
+            tagsFilterListEl.innerHTML = allTags.map(tag => `
+                <button class="tag tag-filter ${activeTag === tag ? 'active' : ''}" onclick="toggleTagFilter('${tag}')">
+                    ${tag}
+                </button>
+            `).join('');
+        }
+
+        function renderConversationsList() {
+            const searchTerm = searchInput.value.toLowerCase();
+            
+            let filteredIds = Object.keys(allMessages);
+
+            if (searchTerm) {
+                filteredIds = filteredIds.filter(id => id.toLowerCase().includes(searchTerm));
+            }
+
+            if (activeTag) {
+                filteredIds = filteredIds.filter(id => conversationTags[id] && conversationTags[id].includes(activeTag));
+            }
+
+            const sortedConversationIds = filteredIds.sort((a, b) => {
+                if (!allMessages[a] || allMessages[a].length === 0) return 1;
+                if (!allMessages[b] || allMessages[b].length === 0) return -1;
+                const lastMsgA = allMessages[a][allMessages[a].length - 1].timestamp;
+                const lastMsgB = allMessages[b][allMessages[b].length - 1].timestamp;
+                return lastMsgB - lastMsgA;
+            });
+
+            if(sortedConversationIds.length === 0){
+                let message = 'Esperando respuestas...';
+                if (activeTag) message = `No hay conversaciones con la etiqueta "${activeTag}".`;
+                else if (searchTerm) message = 'No se encontraron coincidencias.';
+                conversationsListEl.innerHTML = `<p class="text-center text-gray-500 p-4 text-sm">${message}</p>`;
+                return;
+            }
+
+            conversationsListEl.innerHTML = sortedConversationIds.map(id => {
+                const conversation = allMessages[id];
+                if (conversation.length === 0) return '';
+                const lastMessage = conversation[conversation.length - 1];
+                const tags = conversationTags[id] || [];
+                return `
+                    <div class="sidebar-item-container relative">
+                        <button class="w-full text-left p-3 pr-10 rounded-md transition duration-200 sidebar-item ${id === selectedConversationId ? 'active' : 'hover:bg-gray-700'}" onclick="selectConversation('${id}')">
+                            <p class="font-semibold truncate text-sm">${id.split('@')[0]}</p>
+                            <p class="text-xs truncate">${lastMessage.message.replace(/<br>/g, ' ')}</p>
+                            <div class="mt-2 flex flex-wrap">
+                                ${tags.map(tag => `<span class="tag text-xs">${tag}</span>`).join('')}
+                            </div>
+                        </button>
+                        <button onclick="deleteConversation(event, '${id}')" class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-red-400 rounded-full hover:bg-gray-800">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderChatWindow(id) {
+            if (!id) {
+                chatMessagesEl.innerHTML = `
+                 <div class="flex items-center justify-center h-full">
+                    <div class="text-center" style="color: var(--text-muted);">
+                        <i data-lucide="messages-square" class="mx-auto h-12 w-12"></i>
+                        <h3 class="mt-2 text-sm font-medium">Selecciona o crea una conversación</h3>
+                        <p class="mt-1 text-sm">Las respuestas del agente aparecerán aquí.</p>
+                    </div>
+                </div>`;
+                currentConversationIdEl.textContent = 'Ninguna seleccionada';
+                metadataViewerEl.innerHTML = '';
+                chatTagsContainerEl.innerHTML = '';
+                lucide.createIcons();
+                return;
+            }
+
+            const conversation = allMessages[id] || [];
+            currentConversationIdEl.textContent = id.split('@')[0];
+
+            if (conversation.length > 0) {
+                const lastMessage = conversation[conversation.length - 1];
+                if (lastMessage.metadata) {
+                    metadataViewerEl.innerHTML = `<button onclick="showMetadata('${id}')" class="text-xs flex items-center gap-1" style="color: var(--text-muted); hover: var(--text-primary);"><i data-lucide="info" class="w-4 h-4"></i> Ver Metadatos</button>`;
+                } else {
+                    metadataViewerEl.innerHTML = '';
+                }
+            } else {
+                metadataViewerEl.innerHTML = '';
+            }
+
+            const tags = conversationTags[id] || [];
+            chatTagsContainerEl.innerHTML = `
+                <div class="flex flex-wrap items-center">
+                    ${tags.map(tag => `
+                        <span class="tag">
+                            ${tag}
+                            <i data-lucide="x" class="w-3 h-3 tag-remove" onclick="removeTag('${id}', '${tag}')"></i>
+                        </span>
+                    `).join('')}
+                    <input id="add-tag-input" type="text" placeholder="Añadir etiqueta..." class="bg-transparent text-sm focus:outline-none p-1 flex-grow min-w-[100px]" onkeydown="if(event.key === 'Enter') addTag('${id}', this.value);"/>
+                </div>
+            `;
+
+            if (conversation.length === 0) {
+                chatMessagesEl.innerHTML = `
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center" style="color: var(--text-muted);">
+                            <i data-lucide="message-circle" class="mx-auto h-12 w-12"></i>
+                            <h3 class="mt-2 text-sm font-medium">Nuevo Chat</h3>
+                            <p class="mt-1 text-sm">Escribe un mensaje para empezar la conversación.</p>
+                        </div>
+                    </div>`;
+                lucide.createIcons();
+                return;
+            }
+
+            chatMessagesEl.innerHTML = conversation
+                .sort((a, b) => a.timestamp - b.timestamp)
+                .map(msg => {
+                    const isUserMessage = msg.direction === 'outgoing'; 
+                    const bubbleClass = isUserMessage ? 'chat-bubble-user' : 'chat-bubble-agent';
+                    const time = new Date(msg.timestamp * 1000).toLocaleTimeString('es-CO');
+                    
+                    return `
+                        <div class="chat-bubble ${bubbleClass}">
+                            <div class="prose prose-sm prose-invert max-w-none" contenteditable="true">${marked.parse(msg.message)}</div>
+                            <p class="text-xs opacity-70 mt-1 text-right">${time} (editable)</p>
+                        </div>
+                    `;
+                }).join('');
+
+            chatMessagesEl.parentElement.scrollTop = chatMessagesEl.parentElement.scrollHeight;
+            lucide.createIcons();
+        }
+
+        function showMetadata(conversationId) {
+            const conversation = allMessages[conversationId];
+            if (!conversation) return;
+            const lastMessage = conversation[conversation.length - 1];
+            if (!lastMessage.metadata) return;
+            const metadataString = JSON.stringify(lastMessage.metadata, null, 2);
+            alert(`Metadatos del último mensaje:\n\n${metadataString}`);
+        }
+
+        async function fetchLogs() {
+            try {
+                const href = window.location.href;
+                const basePath = href.substring(0, href.lastIndexOf('/') + 1);
+                const logFileUrl = `${basePath}agent_responses.log?t=${new Date().getTime()}`;
+                const response = await fetch(logFileUrl);
+                if (!response.ok) return;
+                const logText = await response.text();
+                
+                const messages = logText.trim().split('\n')
+                    .filter(line => line)
+                    .map(line => { try { return JSON.parse(line); } catch { return null; } })
+                    .filter(msg => msg);
+                
+                const newMessages = messages.reduce((acc, msg) => {
+                    const id = msg.conversationId;
+                    if (!acc[id]) acc[id] = [];
+                    acc[id].push(msg);
+                    return acc;
+                }, {});
+
+                if (JSON.stringify(allMessages) !== JSON.stringify(newMessages)) {
+                    allMessages = newMessages;
+                    renderAll();
+                }
+
+            } catch (error) {
+                console.error("Error al cargar los logs:", error);
+            }
+        }
+
+        async function deleteConversation(event, conversationId) {
+            event.stopPropagation();
+            if (!confirm(`¿Estás seguro de que quieres eliminar la conversación ${conversationId.split('@')[0]}? Esta acción no se puede deshacer.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('delete_conversation.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ conversationId: conversationId })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    delete allMessages[conversationId];
+                    if (selectedConversationId === conversationId) {
+                        selectedConversationId = null;
+                    }
+                    renderAll();
+                } else {
+                    alert(`Error al eliminar la conversación: ${result.message}`);
+                }
+            } catch (error) {
+                console.error("Error al eliminar la conversación:", error);
+                alert("Hubo un error de red al intentar eliminar la conversación.");
+            }
+        }
+
+        function startNewConversation() {
+            const newConversationId = `user-${Date.now()}`;
+            selectedConversationId = newConversationId;
+            allMessages[newConversationId] = [];
+            renderAll();
+            messageInput.focus();
+        }
+
+        // --- Eventos y Inicialización ---
+
+        async function sendMessage(event) {
+            event.preventDefault();
+            const message = messageInput.value.trim();
+            const file = fileInput.files[0];
+
+            if (!message && !file) {
+                alert("Por favor, escribe un mensaje o selecciona un archivo.");
+                return;
+            }
+
+            if (!selectedConversationId) {
+                 startNewConversation();
+            }
+
+            const formData = new FormData();
+            formData.append('conversationId', selectedConversationId);
+            formData.append('message', message);
+            if (file) {
+                formData.append('file', file);
+            }
+
+            try {
+                const response = await fetch('send_message.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Error en el servidor');
+                }
+
+                messageInput.value = '';
+                fileInput.value = '';
+                filePreview.innerHTML = '';
+                await fetchLogs(); 
+
+            } catch (error) {
+                console.error("Error al enviar mensaje:", error);
+                alert(`Error al enviar mensaje: ${error.message}`);
+            }
+        }
+        
+        searchInput.addEventListener('input', renderConversationsList);
+        sendMessageForm.addEventListener('submit', sendMessage);
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (file) {
+                filePreview.innerHTML = `
+                    <div class="flex items-center gap-2 text-sm" style="color: var(--text-muted);">
+                        <i data-lucide="file"></i>
+                        <span>${file.name}</span>
+                        <button type="button" id="remove-file-btn" class="text-red-500 hover:text-red-700">
+                            <i data-lucide="x"></i>
+                        </button>
+                    </div>
+                `;
+                lucide.createIcons();
+
+                document.getElementById('remove-file-btn').addEventListener('click', () => {
+                    fileInput.value = '';
+                    filePreview.innerHTML = '';
+                });
+            } else {
+                filePreview.innerHTML = '';
+            }
+        });
+        
+        clearLogsBtn.addEventListener('click', () => {
+            if (confirm("¿Estás seguro de que quieres borrar TODOS los registros de prueba y las etiquetas? Esta acción no se puede deshacer.")) {
+                allMessages = {};
+                selectedConversationId = null;
+                conversationTags = {};
+                activeTag = null;
+                saveTags(); // Limpiar localStorage
+                renderAll();
+                alert("Registros y etiquetas limpiados de la vista. Para borrarlos permanentemente, debes eliminar el archivo 'agent_responses.log' en el servidor.");
+            }
+        });
+        
+        function selectConversation(id) {
+            selectedConversationId = id;
+            renderAll();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            setTheme(savedTheme);
+            loadTags();
+            renderAll();
+            fetchLogs();
+            setInterval(fetchLogs, 3000);
+        });
+
+    </script>
+</body>
+</html>
